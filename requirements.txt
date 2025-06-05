@@ -24,7 +24,6 @@ cut-cross-entropy==25.1.1
 cycler==0.12.1
 Cython==3.0.12
 datasets==2.21.0
-dgl==2.4.0+cu121
 diffusers==0.32.2
 dill==0.3.8
 dnspython==2.7.0
@@ -34,7 +33,6 @@ e3nn==0.5.6
 einops==0.8.1
 fairchem-core==1.10.0
 filelock==3.16.1
-flash_attn==2.7.4.post1
 fonttools==4.55.2
 frozenlist==1.5.0
 fsspec==2024.6.1
@@ -57,7 +55,6 @@ lightning-utilities==0.11.9
 llvmlite==0.44.0
 lmdb==1.6.2
 lxml==5.3.0
-mace-torch==0.3.12
 Markdown==3.7
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
@@ -99,7 +96,6 @@ p_tqdm==1.4.2
 packaging==24.2
 palettable==3.3.3
 pandas==2.2.3
-pathos==0.3.3
 peft==0.12.0
 pillow==11.0.0
 platformdirs==4.3.6
