@@ -13,10 +13,9 @@ from ase.filters import FrechetCellFilter
 from fairchem.core import OCPCalculator
 from pymatgen.io.ase import AseAtomsAdaptor
 from chgnet.model import CHGNet
-from chgnet.model import StructOptimizer
 import torch
 from chgnet_ import prerelax_with_chgnet
-from llm_utils import cif_str_to_crystal
+from evals.llm_utils import cif_str_to_crystal
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -264,9 +263,7 @@ def esen_relaxed_energy_batch(
     """
     # Load OCP calculator
     # Consider making the checkpoint path an argument if needed
-    calc = OCPCalculator(
-        checkpoint_path="evals/OCPCalcs/esen_30m_oam.pt", cpu=False
-    )
+    calc = OCPCalculator(checkpoint_path="evals/OCPCalcs/esen_30m_oam.pt", cpu=False)
 
     # Import file from CSV
     df = pd.read_csv(gen_file)
@@ -282,10 +279,10 @@ def esen_relaxed_energy_batch(
         if index.size > 0
         else "Processing structures"
     )
-    
+
     # Track iteration count for garbage collection
     iter_count = 0
-    
+
     for i in tqdm(index.tolist(), desc=desc):
         try:
             r = df.iloc[i].to_dict()  # Work with a copy
@@ -328,7 +325,7 @@ def esen_relaxed_energy_batch(
             # Add other initial info if needed, e.g., initial energy requires separate calc
             # r["initial_energy"] = atoms.get_potential_energy() # Would need calc before relax
             res.append(r)
-            
+
             # Perform garbage collection every 10 iterations
             iter_count += 1
             if iter_count % 10 == 0:
@@ -347,6 +344,6 @@ def esen_relaxed_energy_batch(
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        
+
     # Return the results as a DataFrame
     return pd.DataFrame(res)

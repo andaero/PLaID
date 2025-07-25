@@ -26,8 +26,8 @@ import tqdm
 
 from pymatgen.core.structure import Structure
 
-from basic_eval import cif_str_to_crystal
-from relaxations import (
+from evals.llm_utils import cif_str_to_crystal
+from evals.relaxations import (
     m3gnet_relaxed_energy,
     eqv2_relaxed_energy,
     chgnet_relaxed_energy,

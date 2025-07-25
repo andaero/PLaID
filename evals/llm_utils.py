@@ -30,7 +30,12 @@ import smact
 from smact.screening import pauling_test
 import pickle
 
-from eval_util import chemical_symbols, StandardScaler, CompScalerMeans, CompScalerStds
+from evals.eval_util import (
+    chemical_symbols,
+    StandardScaler,
+    CompScalerMeans,
+    CompScalerStds,
+)
 
 # Much of the below code is taken without modification from the original
 # CDVAE repo (https://github.com/txie-93/cdvae).
