@@ -17,3 +17,6 @@
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it5_t1.1,9359,1443,684,757
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it6_t1.1,9640,1993,548,747
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it7_t1.3,9711,2227,537,774
+0,qwen_7b_wyckoff_ift_lr1e-6_temp0.7,9154,808,453,404
+0,qwen_7b_wyckoff_ift_lr1e-6_it2_temp0.7,9263,844,415,408
+0,qwen_7b_dpo_text_sg_combined_t2_it1,8895,921,288,293
