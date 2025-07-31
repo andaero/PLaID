@@ -1,0 +1,7 @@
+,model_name,original_length,num_stable,num_unique,num_sun_materials,num_ssun,num_correct_sg
+0,qwen_7b_text_sg_temp_0.7,840,257,246,217,6,17
+0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it6_temp1.1,980,631,414,419,8,52
+0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it7_temp1.3,979,750,414,477,2,6
+0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it7_temp1.1,992,845,316,423,2,6
+0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it7_temp0.9,1000,932,231,353,1,2
+0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it7_temp0.7,999,961,124,249,0,0
