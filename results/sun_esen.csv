@@ -21,3 +21,10 @@
 0,qwen_7b_wyckoff_ift_lr1e-6_it2_temp0.7,9263,844,415,408
 0,qwen_7b_dpo_text_sg_combined_t2_it1,8895,921,288,293
 0,qwen_7b_wyckoff_ift_lr1e-6_it3_temp0.7,9439,985,401,413
+0,qwen_7b_dpo_wyckoff_uncon_only_t2_novelty_v2_dt_v2_it1_temp0.7,9144,827,487,437
+0,qwen_7b_dpo_wyckoff_uncon_only_t2_novelty_v2_dt_v2_it2_temp0.7,9336,1080,535,537
+0,qwen_7b_dpo_wyckoff_uncon_only_t2_novelty_v2_dt_v2_it3_temp0.9,9151,973,635,568
+0,qwen_7b_dpo_wyckoff_uncon_only_t2_novelty_v2_dt_v2_it4_temp0.9,9321,1125,607,613
+0,qwen_7b_dpo_wyckoff_uncon_only_t2_novelty_v2_dt_v2_it5_temp1.1,9263,1081,679,651
+0,qwen_7b_dpo_wyckoff_uncon_only_t2_novelty_v2_dt_v2_it6_temp1.1,9449,1382,678,715
+0,qwen_7b_dpo_wyckoff_uncon_only_t2_novelty_v2_dt_v2_it7_temp1.3,9389,1401,686,747
