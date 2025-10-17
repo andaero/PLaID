@@ -6,9 +6,14 @@ The original license is preserved.
 from __future__ import annotations
 
 import io
+import sys
+import time
 from argparse import ArgumentParser, Namespace
 from contextlib import redirect_stdout
 from pathlib import Path
+
+# Add project root to path
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import pandas as pd
@@ -31,6 +36,7 @@ from evals.novelty_utils.pymatgen_ import (
     to_structure,
 )
 from evals.novelty_utils.tabular import VALID_TABULAR_DATASETS, get_tabular_dataset
+from cond_gen.sample_parse import get_real_space_group
 
 trap = io.StringIO()
 
@@ -52,7 +58,7 @@ def get_matches(
     return matches, rms_dists
 
 
-def main(args: Namespace) -> None:
+def main(args: Namespace) -> tuple[pd.DataFrame, Path | None]:
     # Initialize tracking dataframe with model name
     tracking_df = pd.DataFrame(index=[0])
     tracking_df["model_name"] = args.model_name
@@ -63,17 +69,28 @@ def main(args: Namespace) -> None:
     else:
         # find root directory of the project
         root = Path(__file__).resolve().parents[2]
-        csv_path = root / "crystal-text-llm" / args.input
+        csv_path = args.input
         original_csv_path = csv_path
         og_df = pd.read_csv(csv_path)
+        if args.sg is not None:
+            if "actual_spacegroup" not in og_df.columns:
+                og_df = get_real_space_group(og_df, num_workers=None, strict=True)
         # rename structure column to "structure"
         df = og_df.rename(columns={args.structure_column: "structure"})
         # preserve the space group column
         if "actual_spacegroup" in og_df.columns:
             df["actual_spacegroup"] = og_df["actual_spacegroup"]
+
     print(df.keys())
-    df = maybe_get_missing_columns(df, COLUMNS_COMPUTATIONS)
     print("length og", len(df))
+    # TODO: HARDCODE first 10000 rows
+    df = df.iloc[:10000]
+    print(len(df))
+    # drop rows with no ehull
+    df = df[df[args.e_above_hull_column].notna()]
+
+    df = maybe_get_missing_columns(df, COLUMNS_COMPUTATIONS)
+    print("length after dropping no ehull", len(df))
     tracking_df["original_length"] = len(df)
 
     if args.ehulls is None:
@@ -117,16 +134,20 @@ def main(args: Namespace) -> None:
 
     matcher = StructureMatcher()  # MatterGen Novelty settings
     # matcher = StructureMatcher(stol=0.5, angle_tol=10, ltol=0.3)  # CDVAE settings
-
+    # create timer to start uniqueness
+    start_time = time.time()
+    print("Uniqueness timer started")
     # uniqueness
     matches_rms_dists_s = joblib_map(
         lambda structure: get_matches(structure, df["structure"], matcher),
         df["structure"].array,
-        n_jobs=-4,
+        n_jobs=-2,
         inner_max_num_threads=1,
         desc="Matching for uniqueness",
         total=len(df),
     )
+    end_time = time.time()
+    print(f"Uniqueness timer ended in {end_time - start_time} seconds")
     # place those lists into a dataframe
     records = []
     for j, (matches, rms_dists) in enumerate(matches_rms_dists_s):
@@ -175,7 +196,6 @@ def main(args: Namespace) -> None:
     print(tds)
     # novelty
     outs = []
-    print(tds.valid_stages)
     for stage in tds.valid_stages:
         if args.reprocess:
             tds.process(stage)
@@ -292,7 +312,7 @@ def main(args: Namespace) -> None:
             tracking_df.to_csv(args.sun_out, mode="a", header=False)
         else:
             tracking_df.to_csv(args.sun_out)
-    out.to_json(args.output)  # Keep saving the detailed output JSON
+    # out.to_json(args.output)  # Keep saving the detailed output JSON
 
     # Return the modified DataFrame and the original CSV path
     return og_df, original_csv_path
@@ -333,7 +353,7 @@ if __name__ == "__main__":
     parser.add_argument("--e_above_hull_maximum", type=float, default=0.0)
     parser.add_argument("--reprocess", action="store_true")
     parser.add_argument("--json_sun_count", type=str, default="sun_count.json")
-    parser.add_argument("--sun_out", type=str, default="sun_eqv2.csv")
+    parser.add_argument("--sun_out", type=str, default="sun_esen.csv")
     parser.add_argument("--no_out", action="store_true")
     parser.add_argument("--both_e_hulls", action="store_true")
 
@@ -341,6 +361,16 @@ if __name__ == "__main__":
     parser.add_argument("--sg", type=int, default=None)
 
     args = parser.parse_args()
+    # check if file with _sun appended exists
+
+    # Construct the new path with _sun appended before the extension
+    original_dir = args.input.parent
+    original_stem = args.input.stem
+    original_suffix = args.input.suffix
+    new_csv_path = original_dir / f"{original_stem}_sun{original_suffix}"
+    if Path(new_csv_path).exists():
+        print(f"File {new_csv_path} already exists. Skipping.")
+        exit()
 
     modified_df, original_csv_path = main(args)
 
@@ -359,6 +389,9 @@ if __name__ == "__main__":
         new_csv_path.parent.mkdir(parents=True, exist_ok=True)
         modified_df.to_csv(new_csv_path, index=False)
         print("Save complete.")
+        # then delete the original_csv_path
+        original_csv_path.unlink()
+        print(f"Original csv {original_csv_path} deleted.")
 
         if args.both_e_hulls:
             # Run for the other hull threshold

@@ -2,8 +2,8 @@ from pymatgen.core import Structure
 from pymatgen.core.structure import Structure
 
 # IMPORTS FOR M3GNET
-import matgl
-from matgl.ext.ase import Relaxer
+# import matgl
+# from matgl.ext.ase import Relaxer
 
 # IMPORTS FOR OMAT
 import io
@@ -12,60 +12,25 @@ from ase.optimize import FIRE
 from ase.filters import FrechetCellFilter
 from fairchem.core import OCPCalculator
 from pymatgen.io.ase import AseAtomsAdaptor
-from chgnet.model import CHGNet
+
 import torch
-from chgnet_ import prerelax_with_chgnet
 from evals.llm_utils import cif_str_to_crystal
 from pathlib import Path
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import gc  # Add garbage collection module
+from fairchem.core.common.relaxation.ase_utils import OCPCalculator
 
 
 def m3gnet_relaxed_energy(cif_str):
-    structure = Structure.from_str(cif_str, fmt="cif")
-
-    pot = matgl.load_model("M3GNet-MP-2021.2.8-PES")
-    relaxer = Relaxer(potential=pot)  # This loads the default pre-trained model
-
-    relax_results = relaxer.relax(structure)
-    final_structure = relax_results["final_structure"]
-    final_energy_per_atom = float(relax_results["trajectory"].energies[-1])
-    return final_energy_per_atom, final_structure
+    print("m3gnet not loaded")
+    return 0, None
 
 
 def chgnet_relaxed_energy(cif_str):
-    """Calculate the relaxed energy of a structure using CHGNet.
-
-    Args:
-        cif_str: CIF string representation of the structure
-
-    Returns:
-        tuple: (initial_energy, relaxed_energy, relaxed_structure_dict)
-    """
-    # Load CHGNet model
-    chgnet = CHGNet.load()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    chgnet.to(device)
-
-    # Convert CIF string to structure
-    crystal = cif_str_to_crystal(cif_str)
-    if crystal is None or not crystal.valid:
-        return None, None
-
-    structure = Structure.from_str(cif_str, fmt="cif")
-    if len(structure) == 1:
-        return None, None
-
-    # Relax structure with CHGNet
-    pair = prerelax_with_chgnet(structure=structure, chgnet=chgnet, steps=1500)
-
-    e_gen = pair.energies[0]  # initial structure energy
-    e_relax = pair.energies[1]  # relaxed structure energy
-    relaxed_structure = pair.structure_dicts[-1]
-    # Return initial energy, relaxed energy, and relaxed structure
-    return e_relax, relaxed_structure
+    print("chgnet not loaded")
+    return 0, None
 
 
 def eqv2_relaxed_energy(cif_str):
@@ -104,47 +69,11 @@ def chgnet_relaxed_energy_batch(
         index: Array of indices to process (if None, process all structures)
     """
     # Load CHGNet model
-    chgnet = CHGNet.load()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    chgnet.to(device)
-
-    # Import file from CSV
-    df = pd.read_csv(gen_file)
-
-    # If index is None, process all structures
-    if index is None:
-        index = np.arange(len(df))
+    # chgnet = CHGNet.load()
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # chgnet.to(device)
+    print("chgnet not loaded")
     res = []
-    for i in tqdm(index.tolist(), desc=f"Processing structures {index[0]}"):
-        try:
-            r = df.iloc[i]
-            cif_str = r["cif"]
-
-            crystal = cif_str_to_crystal(cif_str)
-            if crystal is None or not crystal.valid:
-                continue
-
-            structure = Structure.from_str(cif_str, fmt="cif")
-            if len(structure) == 1:
-                continue
-
-            # Relax structure with CHGNet
-            pair = prerelax_with_chgnet(structure=structure, chgnet=chgnet, steps=steps)
-
-            e_gen = pair.energies[0]  # initial structure energy
-            e_relax = pair.energies[1]  # relaxed structure energy
-            relaxed_structure = pair.structure_dicts[-1]
-
-            # add initial energy, relaxed energy, and relaxed structure to df
-            r["initial_energy"] = e_gen
-            r["relaxed_energy"] = e_relax
-            r["relaxed_cif"] = relaxed_structure
-            res.append(r)
-        except Exception as e:
-            print(f"Error processing structure {i}: {e}")
-            continue
-
-    # Save the updated DataFrame to a new CSV file
     return pd.DataFrame(res)
 
 
@@ -251,7 +180,8 @@ def eqv2_relaxed_energy_batch(
 def esen_relaxed_energy_batch(
     gen_file: Path, fmax: float = 0.02, index: np.ndarray = None
 ):
-    """Calculate the relaxed energy of multiple structures using ESEN OCP calculator.
+    """Calculate the relaxed energy of multiple structures using ESEN OCP calculator
+    with a database-backed batching approach.
 
     Args:
         gen_file: Path to CSV file containing structures.
@@ -347,3 +277,4 @@ def esen_relaxed_energy_batch(
 
     # Return the results as a DataFrame
     return pd.DataFrame(res)
+    return pd.DataFrame([])

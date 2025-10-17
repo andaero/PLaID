@@ -108,6 +108,14 @@ def create_sg_preference_dataset(input_path, threshold, cif_column, args):
             f"No CSV files found in {input_path} matching pattern '*_eqv2_ehull_results.csv'"
         )
 
+    if not args.sg_14:
+        # space groups we want
+        sg_numbers = [1, 15, 38, 119, 143, 194, 216]
+        # filter csv_files to only include sg_numbers
+        csv_files = [f for f in csv_files if int(f.stem.split("_")[0]) in sg_numbers]
+        print(f"filtered to {len(csv_files)} files")
+    else:
+        print(f"using all {len(csv_files)} files")
     all_preference_data = []
 
     # Process each file
@@ -151,7 +159,9 @@ def create_sg_preference_dataset(input_path, threshold, cif_column, args):
         stable_all_df = df[
             df["e_above_hull"] <= threshold
         ].copy()  # All structures with e_above_hull <= threshold
-        unstable_df = df[df["e_above_hull"] > threshold].copy()
+        unstable_df = df[
+            (df["e_above_hull"] > threshold) | (df["e_above_hull"].isna())
+        ].copy()  # also include invalid structures
 
         # Split stable materials into matching and non-matching space groups
         stable_matching_df = stable_all_df[
@@ -179,6 +189,139 @@ def create_sg_preference_dataset(input_path, threshold, cif_column, args):
                         "prompt": prompt,
                         "chosen": stable_matching_row["processed_str"],
                         "rejected": stable_nonmatching_row["processed_str"],
+                    }
+                )
+
+        # 2. Stable vs Unstable
+        for _, stable_row in stable_all_df.iterrows():
+            for _ in range(args.ratio if args and hasattr(args, "ratio") else 2):
+                if unstable_df.empty:
+                    break
+                unstable_row = unstable_df.sample(1).iloc[0]
+                all_preference_data.append(
+                    {
+                        "prompt": prompt,
+                        "chosen": stable_row["processed_str"],
+                        "rejected": unstable_row["processed_str"],
+                    }
+                )
+    if all_preference_data:
+        print(all_preference_data[0])
+        print(all_preference_data[-1])
+    return all_preference_data
+
+
+def create_sg_preference_dataset_novel(input_path, threshold, cif_column, args):
+    # Get all CSV files in the input directory
+    input_dir = Path(input_path)
+    csv_files = list(input_dir.glob("*_eqv2_ehull_results_sun.csv"))
+
+    if not csv_files:
+        raise ValueError(
+            f"No CSV files found in {input_path} matching pattern '*_eqv2_ehull_results_sun.csv'"
+        )
+
+    if not args.sg_14:
+        # space groups we want
+        sg_numbers = [1, 15, 38, 119, 143, 194, 216]
+        # filter csv_files to only include sg_numbers
+        csv_files = [f for f in csv_files if int(f.stem.split("_")[0]) in sg_numbers]
+        print(f"filtered to {len(csv_files)} files")
+    else:
+        print(f"using all {len(csv_files)} files")
+    all_preference_data = []
+
+    # Process each file
+    for csv_file in csv_files:
+        # Extract space group number from filename
+        sg_number = csv_file.stem.split("_")[0]
+
+        # Read the CSV file
+        df = pd.read_csv(csv_file)
+        df = get_real_space_group(df, num_workers=None, strict=True)
+
+        # Define space group specific prompt
+        prompt = "Below is a description of a bulk material. "
+        prompt += condition_templates["spacegroup_number"].format(
+            spacegroup_number=sg_number
+        )
+
+        prompt += (
+            "Generate a description of the lengths and angles of the lattice vectors "
+            "and then the element type and coordinates for each atom within the lattice:\n"
+        )
+        print(prompt)
+
+        # Process crystal strings
+        tqdm.pandas()
+
+        # Helper to get the correct string
+        def process_crystal_string(row):
+            if args and args.raw:
+                return "\n".join(row["gen_str"].split("\n")[1:])
+            else:
+                return (
+                    get_crystal_string_wyckoff_pyx(row[cif_column])
+                    if args and args.wyckoff
+                    else get_crystal_string(row[cif_column])
+                )
+
+        df["processed_str"] = df.progress_apply(process_crystal_string, axis=1)
+
+        # Classify by e_above_hull and space group matching
+        stable_all_df = df[
+            df["e_above_hull"] <= threshold
+        ].copy()  # All structures with e_above_hull <= threshold
+        unstable_df = df[
+            (df["e_above_hull"] > threshold) | (df["e_above_hull"].isna())
+        ].copy()  # also include invalid structures
+
+        # Split stable materials into matching and non-matching space groups
+        stable_matching_df = stable_all_df[
+            stable_all_df["actual_spacegroup"] == int(sg_number)
+        ].copy()
+        stable_nonmatching_df = stable_all_df[
+            stable_all_df["actual_spacegroup"] != int(sg_number)
+        ].copy()
+        novel_true_stable_df = stable_matching_df[
+            stable_matching_df["is_novel0.1"] == True
+        ].copy()
+        novel_false_stable_df = stable_matching_df[
+            stable_matching_df["is_novel0.1"] == False
+        ].copy()
+
+        print(f"\nProcessing space group {sg_number}:")
+        print(
+            f"Metastable (matching {sg_number}): {len(stable_matching_df)}, Metastable (non-matching): {len(stable_nonmatching_df)}"
+        )
+        print(f"Unstable: {len(unstable_df)}")
+
+        # Create preference pairs
+        # 1. Stable (matching SG) vs Stable (non-matching SG)
+        for _, stable_matching_row in stable_matching_df.iterrows():
+            for _ in range(args.ratio if args and hasattr(args, "ratio") else 2):
+                if stable_nonmatching_df.empty:
+                    break
+                stable_nonmatching_row = stable_nonmatching_df.sample(1).iloc[0]
+                all_preference_data.append(
+                    {
+                        "prompt": prompt,
+                        "chosen": stable_matching_row["processed_str"],
+                        "rejected": stable_nonmatching_row["processed_str"],
+                    }
+                )
+
+        # 2. Stable Novel True Matching SG vs Stable Novel False Matching SG
+        for _, novel_true_stable_row in novel_true_stable_df.iterrows():
+            for _ in range(args.ratio if args and hasattr(args, "ratio") else 2):
+                if novel_false_stable_df.empty:
+                    break
+                novel_false_stable_row = novel_false_stable_df.sample(1).iloc[0]
+                all_preference_data.append(
+                    {
+                        "prompt": prompt,
+                        "chosen": novel_true_stable_row["processed_str"],
+                        "rejected": novel_false_stable_row["processed_str"],
                     }
                 )
 
@@ -263,7 +406,7 @@ def create_tiered_preference_dataset(
         }
         preference_data.append(temp)
 
-        # 2. For every (stable, metastable), create two (stable/metastable, unstable) pairs
+        # 2. For every (stable, metastable), create two (stable, unstable) pairs
         for _ in range(2):
             if len(unstable_df) == 0:
                 break
@@ -328,6 +471,133 @@ def create_tiered_preference_dataset_v2(
     unstable_df["processed_str"] = unstable_df.progress_apply(
         process_crystal_string, axis=1
     )
+
+    # 1. Create (Stable, Metastable) pairs
+    for _, stable_row in stable_df.iterrows():
+        if len(metastable_df) == 0:
+            break
+        # Randomly sample one metastable per stable
+        metastable_row = metastable_df.sample(1).iloc[0]
+        temp = {
+            "prompt": prompt,
+            "chosen": stable_row["processed_str"],
+            "rejected": metastable_row["processed_str"],
+        }
+        preference_data.append(temp)
+        for _ in range(2):
+            if len(unstable_df) == 0:
+                break
+            unstable_row = unstable_df.sample(1).iloc[0]
+            temp = {
+                "prompt": prompt,
+                "chosen": stable_row["processed_str"],
+                "rejected": unstable_row["processed_str"],
+            }
+            preference_data.append(temp)
+
+    # 2. For every stable or metastable, create two (stable/metastable, unstable) pairs
+    for _, row in metastable_df.iterrows():
+        for _ in range(args.ratio):
+            if len(unstable_df) == 0:
+                break
+            unstable_row = unstable_df.sample(1).iloc[0]
+            temp = {
+                "prompt": prompt,
+                "chosen": row["processed_str"],
+                "rejected": unstable_row["processed_str"],
+            }
+            preference_data.append(temp)
+
+    return preference_data
+
+
+def create_tiered_preference_dataset_v2_novel(
+    input_path, output_path, threshold=0.08, cif_column="relaxed_cif", args=None
+):
+    df = pd.read_csv(input_path)
+    preference_data = []
+
+    # Define prompt
+    prompt = "Below is a description of a bulk material. "
+    if args and args.conditions == "e_above_hull":
+        prompt += "The energy above the convex hull is 0. "
+    prompt += (
+        "Generate a description of the lengths and angles of the lattice vectors "
+        "and then the element type and coordinates for each atom within the lattice:\n"
+    )
+    tqdm.pandas()
+
+    # Helper to get the correct string
+    def process_crystal_string(row):
+        if args and args.raw:
+            return "\n".join(row["gen_str"].split("\n")[1:])
+        else:
+            return (
+                get_crystal_string_wyckoff_pyx(row[cif_column])
+                if args and args.wyckoff
+                else get_crystal_string(row[cif_column])
+            )
+
+    # Classify stability
+    stable_df = df[df["e_above_hull"] <= 0].copy()
+    metastable_df = df[
+        (df["e_above_hull"] > 0) & (df["e_above_hull"] <= threshold)
+    ].copy()
+    unstable_df = df[
+        (df["e_above_hull"] > threshold) | (df["e_above_hull"].isna())
+    ].copy()
+
+    print(
+        f"Stable: {len(stable_df)}, Metastable: {len(metastable_df)}, Unstable: {len(unstable_df)}"
+    )
+
+    if "is_novel0.0" in stable_df.columns:
+        novel_true_stable_df = stable_df[stable_df["is_novel0.0"] == True].copy()
+        # All other stable materials (original False or unmappable) go to sun_false_stable
+        novel_false_stable_df = stable_df[stable_df["is_novel0.0"] == False].copy()
+
+        print(
+            f"Total stable: {len(stable_df)}, Novel True Stable: {len(novel_true_stable_df)}, Novel False Stable: {len(novel_false_stable_df)}"
+        )
+        if len(stable_df) != (len(novel_true_stable_df) + len(novel_false_stable_df)):
+            # This warning means some 'sun_0.0_bool' values were neither True nor False after mapping, which shouldn't happen with the current map_to_bool.
+            # More likely, it would indicate an issue if stable_all_df itself had NaNs that were not handled by 'sun_0.0_bool' creation.
+            # However, our map_to_bool defaults to False, so all rows in stable_all_df will have a sun_0.0_bool.
+            print(
+                "Info: Verification check: len(stable_all_df) == len(sun_true_stable_df) + len(sun_false_stable_df). If not, review 'sun_0.0' parsing."
+            )
+    else:
+        raise ValueError("is_novel0.0 column not found in stable materials")
+
+    # Precompute processed strings
+    stable_df["processed_str"] = stable_df.progress_apply(
+        process_crystal_string, axis=1
+    )
+    metastable_df["processed_str"] = metastable_df.progress_apply(
+        process_crystal_string, axis=1
+    )
+    unstable_df["processed_str"] = unstable_df.progress_apply(
+        process_crystal_string, axis=1
+    )
+
+    novel_true_stable_df["processed_str"] = novel_true_stable_df.progress_apply(
+        process_crystal_string, axis=1
+    )
+    novel_false_stable_df["processed_str"] = novel_false_stable_df.progress_apply(
+        process_crystal_string, axis=1
+    )
+
+    # 1. Create (Novel True Stable, Novel False Stable) pairs
+    for _, novel_true_stable_row in novel_true_stable_df.iterrows():
+        if len(novel_false_stable_df) == 0:
+            break
+        novel_false_stable_row = novel_false_stable_df.sample(1).iloc[0]
+        temp = {
+            "prompt": prompt,
+            "chosen": novel_true_stable_row["processed_str"],
+            "rejected": novel_false_stable_row["processed_str"],
+        }
+        preference_data.append(temp)
 
     # 1. Create (Stable, Metastable) pairs
     for _, stable_row in stable_df.iterrows():
@@ -543,15 +813,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["basic", "tiered", "tiered2", "tieredSun", "sg"],
+        choices=[
+            "basic",
+            "tiered",
+            "tiered2",
+            "tieredSun",
+            "tieredNovel",
+            "sg",
+            "sg_novel",
+        ],
         default="basic",
         help="Dataset creation mode: 'basic' (uses create_preference_dataset_2), 'tiered' (uses create_tiered_preference_dataset), 'tiered2' (uses create_tiered_preference_dataset_v2), or 'tieredSun' (uses create_tiered_preference_dataset_sun). Default is 'basic'.",
     )
     parser.add_argument(
         "--mode_2",
         type=str,
-        choices=["sg"],
+        choices=["sg", "sg_novel"],
         default=None,
+    )
+
+    parser.add_argument(
+        "--sg_14",
+        action="store_true",
+        default=False,
     )
     args = parser.parse_args()
 
@@ -578,8 +862,23 @@ if __name__ == "__main__":
             cif_column=args.cif_column,
             args=args,
         )
+    elif args.mode == "tieredNovel":
+        preference_data = create_tiered_preference_dataset_v2_novel(
+            input_path=args.input_path,
+            output_path=args.output_path,
+            threshold=args.threshold,
+            cif_column=args.cif_column,
+            args=args,
+        )
     elif args.mode == "sg":
         preference_data = create_sg_preference_dataset(
+            input_path=args.input_path,
+            threshold=args.threshold,
+            cif_column=args.cif_column,
+            args=args,
+        )
+    elif args.mode == "sg_novel":
+        preference_data = create_sg_preference_dataset_novel(
             input_path=args.input_path,
             threshold=args.threshold,
             cif_column=args.cif_column,
@@ -597,6 +896,16 @@ if __name__ == "__main__":
             print(f"Creating SG preference dataset from {args.input_path_2}")
             preference_data.extend(
                 create_sg_preference_dataset(
+                    input_path=args.input_path_2,
+                    threshold=args.threshold,
+                    cif_column=args.cif_column,
+                    args=args,
+                )
+            )
+        elif args.mode_2 == "sg_novel":
+            print(f"Creating SG preference dataset from {args.input_path_2}")
+            preference_data.extend(
+                create_sg_preference_dataset_novel(
                     input_path=args.input_path_2,
                     threshold=args.threshold,
                     cif_column=args.cif_column,

@@ -17,8 +17,8 @@ import joblib
 import pandas as pd
 from pymatgen.core import Composition, Structure
 
-from flowmm.pandas_ import maybe_get_missing_columns
-from flowmm.pymatgen_ import COLUMNS_COMPUTATIONS
+from evals.novelty_utils.pandas_ import maybe_get_missing_columns
+from evals.novelty_utils.pymatgen_ import COLUMNS_COMPUTATIONS
 
 ValidStages = Literal["train", "val", "test"]
 VALID_STAGES: Tuple[ValidStages, ...] = get_args(ValidStages)
@@ -112,6 +112,8 @@ class DiffCSP_MP20(TabularDataset):
         our_columns_computations["composition"] = lambda ddf: ddf["pretty_formula"].map(
             lambda x: Composition(x).as_dict()
         )
+        # create a copy of cif column called structure
+        df["structure"] = df["cif"]
         df = maybe_get_missing_columns(df, our_columns_computations)
 
         # save
@@ -181,6 +183,9 @@ class Alex_MP20(TabularDataset):
 
         df = pd.read_csv(unprocessed_path)
         df["mp_id"] = df["material_id"]
+        print(df.columns)
+        # rename reduced_formula to pretty_formula
+        df = df.rename(columns={"reduced_formula": "pretty_formula"})
         # drop rows with no composition
         # print the number of rows before and after
         print(f"Number of rows before: {len(df)}")
