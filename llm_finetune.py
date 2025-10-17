@@ -277,16 +277,6 @@ def setup_training_args(args):
     os.environ["WANDB_LOG_MODEL"] = "end"  # log last model checkpoint
     os.environ["WANDB_MODE"] = "offline"
 
-    if args.teapot:
-        # os.environ["WANDB_CACHE_DIR"] = "/mnt/cs/cs152/individual/wandb"
-        # os.environ["WANDB_CONFIG_DIR"] = "/mnt/cs/cs152/individual/wandb"
-        # os.environ["WANDB_DIR"] = "/mnt/cs/cs152/individual/wandb"
-        os.environ["WANDB_DATA_DIR"] = "/mnt/cs/cs152/individual/wandb"
-    else:
-        os.environ["WANDB_CACHE_DIR"] = "/scratch/user/u.ax227774/wandb"
-        os.environ["WANDB_CONFIG_DIR"] = "/scratch/user/u.ax227774/wandb"
-        os.environ["WANDB_DATA_DIR"] = "/scratch/user/u.ax227774/wandb"
-
     if args.debug:
         os.environ["WANDB_DISABLED"] = "True"
     os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
@@ -482,14 +472,10 @@ def setup_model_offline(args, rank):
         base_str = llama3_model_string_online(model_size)
 
     if args.qwen:
-        if args.teapot:
-            model_string = f"Qwen/{base_str}"
-        else:
-            model_string = f"qwen-local/{base_str}"
-    elif args.teapot:
-        model_string = f"meta-llama/{base_str}"
+        model_string = f"Qwen/{base_str}"
     else:
-        model_string = f"llama/{base_str}"
+        model_string = f"meta-llama/{base_str}"
+
 
     quantization_config = BitsAndBytesConfig(load_in_4bit=args.fp4)
     model = AutoModelForCausalLM.from_pretrained(
@@ -500,14 +486,9 @@ def setup_model_offline(args, rank):
     )
 
     if args.qwen:
-        if args.teapot:
-            tokenizer_string = f"Qwen/{base_str}"
-        else:
-            tokenizer_string = f"qwen-local/{base_str}-tokenizer"
-    elif args.teapot:
-        tokenizer_string = f"meta-llama/{base_str}"
+        tokenizer_string = f"Qwen/{base_str}"
     else:
-        tokenizer_string = f"llama/{base_str}-tokenizer"
+        tokenizer_string = f"meta-llama/{base_str}"
 
     llama_tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_string,

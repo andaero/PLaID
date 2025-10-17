@@ -6,7 +6,7 @@ from matplotlib.font_manager import FontProperties
 import pandas as pd
 
 # Set up custom font
-font_path = "/mnt/cs/cs152/individual/crystal-text-llm/visualizations/DMMono-Regular.ttf"
+font_path = "./visualizations/DMMono-Regular.ttf"
 custom_font = FontProperties(fname=font_path)
 
 # Load data from CSV files
