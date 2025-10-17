@@ -9,7 +9,7 @@ PLaID++ introduces an LLM fine-tuned for stable and property-targeted inorganic 
 2. Aligning the model using Direct Preference Optimization (DPO), an RL method guided by machine-learned interatomic potentials
 3. Unified training across conditional and unconditional generation tasks
 
-![plaid_sun_results](https://arxiv.org/html/2509.07150v1/x1.png)
+![plaid_architecture_diagram](https://arxiv.org/html/2509.07150v1/Figures/plaid++_diagram.png)
 
 ## Setup
 
