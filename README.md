@@ -1,5 +1,9 @@
 # PLaID++
 
+[![arXiv](https://img.shields.io/badge/PDF-arXiv-blue)](https://arxiv.org/pdf/2509.07150)
+[![Code](https://img.shields.io/badge/Code-GitHub-red)](https://github.com/andaero/PLaID)
+[![Weights](https://img.shields.io/badge/Weights-HuggingFace-yellow)](https://huggingface.co/HOPE-Lab-HMC/PLaID/tree/main/train_dpo)
+
 This repository contains the official implementation for our paper: [**_PLaID++: A Preference-Aligned Language Model for Targeted Inorganic Materials Design_**](https://arxiv.org/pdf/2509.07150), by [Andy Xu](https://www.linkedin.com/in/andyxuai/), [Rohan Desai](https://www.rohandesai.xyz), [Larry Wang](https://www.linkedin.com/in/larwang314/), [Gabriel Hope](https://www.linkedin.com/in/gabriel-hope-87472542/), and [Ethan Ritz](https://www.linkedin.com/in/ethan-ritz-2bba69382/).
 
 ## Summary
