@@ -99,7 +99,7 @@ PLaID/
 
 ## Model
 
-[The full PLaID++ model is available on HuggingFace](https://huggingface.co/HOPE-Lab-HMC/PLaID).
+[The full PLaID++ model is available on HuggingFace](https://huggingface.co/HOPE-Lab-HMC/PLaID/tree/main/train_dpo).
 
 ## Citation
 
