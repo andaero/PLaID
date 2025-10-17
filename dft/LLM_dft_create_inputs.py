@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Copyright (c) Meta Platforms, Inc. and affiliates."""
 
 """
@@ -20,16 +21,19 @@ from pymatgen.io.vasp.outputs import Vasprun
 from pymatgen.io.vasp.sets import MPRelaxSet
 from tqdm import tqdm
 
-from flowmm.pandas_ import filter_prerelaxed_LLM, maybe_get_missing_columns
-from flowmm.pymatgen_ import COLUMNS_COMPUTATIONS, get_nary, to_structure
+from evals.novelty_utils.pandas_ import filter_prerelaxed_LLM, maybe_get_missing_columns
+from evals.novelty_utils.pymatgen_ import COLUMNS_COMPUTATIONS, get_nary, to_structure
+
 # llm_DPO_3_wyckoff_samples_relaxed.json
 CHGNET_STABILITY_THRESHOLD = 0.1
+
 
 def parse_vasp(path: Path | str):
     path = Path(path)
     vrun = Vasprun(filename=path)
     vrun.final_structure
     vrun.final_energy
+
 
 def write_vasp_directory(
     structure: Structure | dict,

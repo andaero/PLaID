@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
-sys.path.append(
-    "/home/compmat/larwang/flowmm/src"
-)  # this line gets the flowmm.pandas_ and flowmm.pymatgen_ dependencies working.
-
 import os
 import pickle
 from argparse import ArgumentParser, Namespace
@@ -24,8 +18,7 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.vasp.inputs import Incar, Poscar
 from tqdm import tqdm
 
-from flowmm.pandas_ import filter_prerelaxed, maybe_get_missing_columns
-from flowmm.pymatgen_ import COLUMNS_COMPUTATIONS, to_structure
+from evals.novelty_utils.pymatgen_ import to_structure
 
 EntriessType = list[list[ComputedStructureEntry]]
 EntryDictssType = list[list[dict]]
@@ -98,7 +91,9 @@ def get_record(file: Path, dft_path: Path) -> dict[str, any]:
     record = apply_name_fn_dict(file, NAME_FN_FOR_PATH)
 
     # 2. Replace Trajectory load with VASP parser
-    vasp_dir = dft_path  # dft_path already contains the full path to the crystal directory
+    vasp_dir = (
+        dft_path  # dft_path already contains the full path to the crystal directory
+    )
     print(f"vasp_dir: {vasp_dir}")
     vasp_data, raw_energy, last_atoms = _parse_vasp(vasp_dir)
     record.update(vasp_data)
@@ -146,16 +141,16 @@ def get_dft_results(
     # n_jobs: int = 1
 ) -> pd.DataFrame:
     dft_path = Path("dft") / model
-    
+
     # Get all crystal directories
     crystal_dirs = []
     for crystal_dir in Path(dft_path).iterdir():
         if crystal_dir.is_dir():
             crystal_dirs.append((crystal_dir.name))
-    
+
     # Process all crystals
     print(crystal_dirs)
-    
+
     records = []
     for crystal in tqdm(crystal_dirs, desc="Processing crystals"):
         try:
@@ -166,7 +161,7 @@ def get_dft_results(
         except Exception as e:
             print(f"Error processing {crystal}: {str(e)}")
             continue
-    
+
     df = pd.DataFrame.from_records(records)
     if not df.empty:  # Only try to map method if we have records
         df["method"] = df["method"].map(
@@ -302,4 +297,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args)
-
