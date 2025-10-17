@@ -1,4 +1,4 @@
-# PLaID++
+# PLaID++: A Preference Aligned Language Model for Targeted Inorganic Materials Design
 
 [![arXiv](https://img.shields.io/badge/PDF-arXiv-blue)](https://arxiv.org/pdf/2509.07150)
 [![Code](https://img.shields.io/badge/Code-GitHub-red)](https://github.com/andaero/PLaID)
