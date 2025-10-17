@@ -16,7 +16,7 @@ PLaID++ introduces an LLM fine-tuned for stable and property-targeted inorganic 
 First, create an environment and install the dependencies using uv:
 
 ```
-uv venv plaid
+uv venv --python 3.12 plaid
 source plaid/bin/activate
 uv sync
 ```
@@ -78,7 +78,6 @@ PLaID/
 ├─ DPO_preprocess.py                  — Build DPO preference datasets from eval results
 ├─ DPO_train.py                       — Train models with DPO
 ├─ llm_finetune.py                    — Supervised fine‑tuning/LoRA utilities for LLMs
-├─ llm_ift_hydra.py                   — Hydra-based entrypoint for instruction fine‑tuning
 ├─ llm_sample.py                      — Sample generations (conditional/unconstrained) from trained models
 ├─ scripts/
 │  └─ plaid_dpo.sh                    — DPO pipeline for flagship Plaid++
@@ -86,14 +85,13 @@ PLaID/
 │  ├─ csv_gen.py                      — Create condition CSVs for conditional generation
 │  ├─ alex_mp_analysis.py             — MP data analysis helpers (condition curation)
 ├─ evals/
-│  ├─ e_above_hull.py                 — Compute E_above_hull; batched relaxations (EQV2/CHGNet/ESEN)
+│  ├─ e_above_hull.py                 — Compute E_above_hull; batched relaxations
 │  ├─ basic_eval.py                   — Core evaluation routines for generations
 │  ├─ relaxations.py                  — Relaxation backends and wrappers
 │  ├─ novelty.py                      — Novelty metrics for generated structures
 ├─ dft/
 │  ├─ LLM_dft_create_inputs.py        — Prepare DFT input files for follow‑up calculations
 │  ├─ ehull_correction_newest.py      — Convex hull energy correction utilities
-│  └─ equiv2_regression.py            — EQV2 fitting/regression helpers
 ├─ data/                              — Datasets (raw/processed) for training/eval
 ├─ results/                           — Evaluation outputs (CSV summaries, metrics)
 └─ exp/                               — Experiment outputs (checkpoints, trained models)
