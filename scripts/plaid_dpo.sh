@@ -1,5 +1,5 @@
 #!/bin/bash
-# TO RUN: bash slurm/bash/qwenSGCombinedt2.sh | tee logs/qwenSGCombinedt2.log
+# TO RUN: bash scripts/plaid_dpo.sh | tee logs/plaid_dpo.log
 export CUDA_VISIBLE_DEVICES=0
 
 set -e  # Exit on error
