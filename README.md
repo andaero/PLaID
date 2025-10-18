@@ -8,7 +8,7 @@ This repository contains the official implementation for our paper: [**_PLaID++:
 
 ## Summary
 
-PLaID++ introduces an LLM fine-tuned for stable and property-targeted inorganic crystal generation. PLaID++ achieves a **~50% higher S.U.N.** (Stable, Unique, Novel) rate than prior work and robust conditional generation by space group though:
+PLaID++ introduces an LLM fine-tuned for stable and property-targeted inorganic crystal generation. PLaID++ achieves a **~50% higher S.U.N.** (Stable, Unique, Novel) rate than prior work and robust space-group conditioned generation through:
 1. Leveraging a novel Wyckoff-based text encoding
 2. Aligning the model using Direct Preference Optimization (DPO), an RL method guided by machine-learned interatomic potentials
 3. Unified training across conditional and unconditional generation tasks
