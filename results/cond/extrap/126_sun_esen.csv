@@ -1,0 +1,3 @@
+,model_name,original_length,num_stable,num_unique,num_sun_materials,num_ssun,num_correct_sg
+0,plaid_it6_temp1.1_samples_extrapolate,951,268,188,198,0,0
+0,qwen_7b_wyckoff_sft_extrapolate_temp0.7,919,176,143,134,0,0
