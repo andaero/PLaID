@@ -7,6 +7,7 @@
 0,qwen_7b_dpo_text_sg_combined_t2_it3,8743,1394,130,169
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_it2_dt_t0.9,9060,797,579,494
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_it3_dt_t1.1,9065,782,612,520
+0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_it4_temp1.3,8996,686,588,500
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_it1_t0.8,9025,797,530,458
 0,symmcd,8147,419,375,272
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_0.1_it2_t0.8,9089,965,594,563
