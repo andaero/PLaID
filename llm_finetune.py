@@ -114,30 +114,35 @@ class CifDataset(Dataset):
             "spacegroup.number",
         ]
 
+        prompt_lookup = {
+            "formation_energy_per_atom": "The formation energy per atom is",
+            "band_gap": "The band gap is",
+            "pretty_formula": "The chemical formula is",
+            "e_above_hull": "The energy above the convex hull is",
+            "elements": "The elements are",
+            "spacegroup.number": "The spacegroup number is",
+            "bulk_mod": "The bulk modulus is",
+        }
+
         valid_attributes = list(set(all_attributes) & set(input_dict.keys()))
-        # sample a random collection of attributes
-        num_attributes = random.randint(0, len(valid_attributes))
-        if num_attributes > 0 and self.w_attributes:
-            attributes = random.sample(valid_attributes, num_attributes)
-            attributes = ["pretty_formula"] + attributes
+        
+        if not pd.isna(input_dict["bulk_mod"]):
+            prompt += f"{prompt_lookup["bulk_mod"]} {int(input_dict["bulk_mod"])}. "
+        else:
+            # sample a random collection of attributes
+            num_attributes = random.randint(0, len(valid_attributes))
+            if num_attributes > 0 and self.w_attributes:
+                attributes = random.sample(valid_attributes, num_attributes)
+                attributes = ["pretty_formula"] + attributes
 
-            prompt_lookup = {
-                "formation_energy_per_atom": "The formation energy per atom is",
-                "band_gap": "The band gap is",
-                "pretty_formula": "The chemical formula is",
-                "e_above_hull": "The energy above the convex hull is",
-                "elements": "The elements are",
-                "spacegroup.number": "The spacegroup number is",
-            }
-
-            for attr in attributes:
-                if attr == "elements":
-                    prompt += f"{prompt_lookup[attr]} {', '.join(input_dict[attr])}. "
-                elif attr in ["formation_energy_per_atom", "band_gap", "e_above_hull"]:
-                    if not pd.isna(input_dict[attr]):
-                        prompt += f"{prompt_lookup[attr]} {round(float(input_dict[attr]), 4)}. "
-                else:
-                    prompt += f"{prompt_lookup[attr]} {input_dict[attr]}. "
+                for attr in attributes:
+                    if attr == "elements":
+                        prompt += f"{prompt_lookup[attr]} {', '.join(input_dict[attr])}. "
+                    elif attr in ["formation_energy_per_atom", "band_gap", "e_above_hull"]:
+                        if not pd.isna(input_dict[attr]):
+                            prompt += f"{prompt_lookup[attr]} {round(float(input_dict[attr]), 4)}. "
+                    else:
+                        prompt += f"{prompt_lookup[attr]} {input_dict[attr]}. "
         # prompt += (
         #     "Generate a crystal structure with the chemical formula, space group,"
         #     "the lengths and angles of the lattice vectors, the number of sites, "
@@ -152,7 +157,7 @@ class CifDataset(Dataset):
 
         crystal_str = self.crystal_string(input_dict)
         tokens = self.llama_tokenizer(
-            crystal_str + self.llama_tokenizer.eos_token,
+            prompt + crystal_str + self.llama_tokenizer.eos_token,
             return_tensors="pt",
             max_length=MAX_LENGTH,
             truncation=True,
@@ -244,7 +249,6 @@ class DataCollatorForSupervisedDataset(object):
             labels=labels,
             attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
         )
-
 
 def setup_datasets(args, llama_tokenizer, transform_args={}):
     format_options = {
