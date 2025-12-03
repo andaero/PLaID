@@ -6,3 +6,5 @@
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it7_temp0.9,990,279,256,244,91,542
 0,qwen_7b_dpo_wyckoff_sg_combined_t2_novelty_v2_dt_v2_it7_temp0.7,995,291,249,249,82,532
 0,qwen_7b_dpo_wyckoff_sg_only_t2_novelty_v2_dt_v2_it6_temp1.1,893,250,233,207,89,497
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it8_temp1.3,938,340,297,264,90,465
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it8_temp1.3,970,372,305,322,105,250

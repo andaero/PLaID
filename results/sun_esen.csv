@@ -33,3 +33,13 @@
 0,plaid_sft_prompt_3_temp0.7,8891,322,226,216
 0,plaid_final_it7_prompt_1_temp1.3,9013,761,540,495
 0,plaid_final_it7_prompt_3_temp1.3,8909,420,368,307
+0,qwen_7b_bulk_modulus_formula_temp0.7,9035,675,437,354
+0,qwen_7b_bulk_modulus_temp0.7,8978,760,445,401
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it1_temp0.7,9175,1038,565,527
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it2_temp0.7,9318,1213,557,571
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it3_temp0.9,9144,1130,700,664
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it4_temp0.9,9304,1357,663,695
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it5_temp1.1,9170,1144,667,645
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it6_temp1.1,9354,1421,642,693
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it7_temp1.3,9325,1369,713,751
+0,qwen_7b_dpo_bulk_modulus_all_combined_nov_dt_v2_it8_temp1.3,9430,1759,694,815
