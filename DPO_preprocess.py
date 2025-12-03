@@ -284,10 +284,10 @@ def create_sg_preference_dataset_novel(input_path, threshold, cif_column, args):
             stable_all_df["actual_spacegroup"] != int(sg_number)
         ].copy()
         novel_true_stable_df = stable_matching_df[
-            stable_matching_df["is_novel0.1"] == True
+            stable_matching_df["is_novel0.08"] == True
         ].copy()
         novel_false_stable_df = stable_matching_df[
-            stable_matching_df["is_novel0.1"] == False
+            stable_matching_df["is_novel0.08"] == False
         ].copy()
 
         print(f"\nProcessing space group {sg_number}:")
@@ -389,19 +389,27 @@ def create_preference_dataset_bulk_modulus_novel(
         print("No stable structures found for bulk modulus tiering; skipping.")
         return []
 
-    high_bulk_df = stable_df[stable_df[bulk_column] >= bulk_threshold].copy()
+    high_bulk_df = stable_df[
+        (stable_df[bulk_column] >= bulk_threshold) & (stable_df[bulk_column] <= 725)
+    ].copy()
     low_bulk_df = stable_df[
-        (stable_df[bulk_column] < bulk_threshold) | (stable_df[bulk_column].isna())
+        (stable_df[bulk_column] < bulk_threshold)
+        | (stable_df[bulk_column] > 725)
+        | (stable_df[bulk_column].isna())
     ].copy()
 
-    if "is_novel0.1" not in stable_df.columns:
+    if "is_novel0.08" not in stable_df.columns:
         raise ValueError(
-            "Column 'is_novel0.1' not found in bulk modulus dataset; required for novel tiering."
+            "Column 'is_novel0.08' not found in bulk modulus dataset; required for novel tiering."
         )
-    novel_true_df = stable_df[stable_df["is_novel0.1"] == True].copy()
-    novel_high_df = novel_true_df[novel_true_df[bulk_column] >= bulk_threshold].copy()
+    novel_true_df = stable_df[stable_df["is_novel0.08"] == True].copy()
+    novel_high_df = novel_true_df[
+        (novel_true_df[bulk_column] >= bulk_threshold)
+        & (novel_true_df[bulk_column] <= 725)
+    ].copy()
     novel_low_df = novel_true_df[
         (novel_true_df[bulk_column] < bulk_threshold)
+        | (novel_true_df[bulk_column] > 725)
         | (novel_true_df[bulk_column].isna())
     ].copy()
 
@@ -429,7 +437,7 @@ def create_preference_dataset_bulk_modulus_novel(
     else:
         print("Skipping stable high-vs-low bulk tiering (insufficient data).")
 
-    # 2. Stable novel (is_novel0.1 == True) high-bulk vs stable novel low-bulk
+    # 2. Stable novel (is_novel0.08 == True) high-bulk vs stable novel low-bulk
     if not novel_high_df.empty and not novel_low_df.empty:
         for _, novel_high_row in novel_high_df.iterrows():
             for _ in range(ratio):
@@ -457,6 +465,138 @@ def create_preference_dataset_bulk_modulus_novel(
                     {
                         "prompt": prompt,
                         "chosen": stable_row["processed_str"],
+                        "rejected": unstable_row["processed_str"],
+                    }
+                )
+    else:
+        print("Skipping stable-vs-unstable tiering (insufficient data).")
+
+    if preference_data:
+        print("Bulk modulus preference pairs created:", len(preference_data))
+    return preference_data
+
+
+def create_preference_dataset_bulk_modulus_novel_v2(
+    input_path, threshold, cif_column, bulk_column, bulk_threshold, args
+):
+    """Create preference pairs from a bulk-modulus dataset.
+
+    Tiers:
+      1. Stable high-bulk vs stable low-bulk structures.
+      2. Stable novel (is_novel0.08 == True) high-bulk vs stable novel low-bulk.
+      3. Stable high-bulk vs unstable.
+    """
+
+    df = pd.read_csv(input_path)
+    if bulk_column not in df.columns:
+        raise ValueError(f"Column '{bulk_column}' not present in {input_path}.")
+
+    prompt = "Below is a description of a bulk material. "
+    if args and args.conditions == "e_above_hull":
+        prompt += "The energy above the convex hull is 0. "
+    prompt += (
+        "Generate a description of the lengths and angles of the lattice vectors "
+        "and then the element type and coordinates for each atom within the lattice:\n"
+    )
+
+    tqdm.pandas()
+
+    def process_crystal_string(row):
+        if args and args.raw:
+            return "\n".join(row["gen_str"].split("\n")[1:])
+        return (
+            get_crystal_string_wyckoff_pyx(row[cif_column])
+            if args and args.wyckoff
+            else get_crystal_string(row[cif_column])
+        )
+
+    df["processed_str"] = df.progress_apply(process_crystal_string, axis=1)
+
+    stable_df = df[df["e_above_hull"] <= threshold].copy()
+    unstable_df = df[
+        (df["e_above_hull"] > threshold) | (df["e_above_hull"].isna())
+    ].copy()
+
+    if stable_df.empty:
+        print("No stable structures found for bulk modulus tiering; skipping.")
+        return []
+
+    high_bulk_df = stable_df[
+        (stable_df[bulk_column] >= bulk_threshold) & (stable_df[bulk_column] <= 725)
+    ].copy()
+    low_bulk_df = stable_df[
+        (stable_df[bulk_column] < bulk_threshold)
+        | (stable_df[bulk_column] > 725)
+        | (stable_df[bulk_column].isna())
+    ].copy()
+
+    if "is_novel0.08" not in stable_df.columns:
+        raise ValueError(
+            "Column 'is_novel0.08' not found in bulk modulus dataset; required for novel tiering."
+        )
+    novel_true_df = stable_df[stable_df["is_novel0.08"] == True].copy()
+    novel_high_df = novel_true_df[
+        (novel_true_df[bulk_column] >= bulk_threshold)
+        & (novel_true_df[bulk_column] <= 725)
+    ].copy()
+    novel_low_df = novel_true_df[
+        (novel_true_df[bulk_column] < bulk_threshold)
+        | (novel_true_df[bulk_column] > 725)
+        | (novel_true_df[bulk_column].isna())
+    ].copy()
+
+    preference_data = []
+    ratio = args.ratio if args and hasattr(args, "ratio") else 2
+
+    print(
+        f"Bulk dataset stats — Stable: {len(stable_df)}, Unstable: {len(unstable_df)}, High bulk: {len(high_bulk_df)}, Low bulk: {len(low_bulk_df)}, Novel high: {len(novel_high_df)}, Novel low: {len(novel_low_df)}"
+    )
+
+    # 1. Stable high-bulk vs stable low-bulk
+    if not high_bulk_df.empty and not low_bulk_df.empty:
+        for _, high_row in high_bulk_df.iterrows():
+            for _ in range(ratio):
+                if low_bulk_df.empty:
+                    break
+                low_row = low_bulk_df.sample(1).iloc[0]
+                preference_data.append(
+                    {
+                        "prompt": prompt,
+                        "chosen": high_row["processed_str"],
+                        "rejected": low_row["processed_str"],
+                    }
+                )
+    else:
+        print("Skipping stable high-vs-low bulk tiering (insufficient data).")
+
+    # 2. Stable novel (is_novel0.08 == True) high-bulk vs stable novel low-bulk
+    if not novel_high_df.empty and not novel_low_df.empty:
+        for _, novel_high_row in novel_high_df.iterrows():
+            for _ in range(ratio):
+                if novel_low_df.empty:
+                    break
+                novel_low_row = novel_low_df.sample(1).iloc[0]
+                preference_data.append(
+                    {
+                        "prompt": prompt,
+                        "chosen": novel_high_row["processed_str"],
+                        "rejected": novel_low_row["processed_str"],
+                    }
+                )
+    else:
+        print("Skipping novel high-vs-low bulk tiering (insufficient data).")
+
+    # 3. Stable high-bulk vs unstable high-bulk structures
+    if not high_bulk_df.empty and not unstable_df.empty:
+        for _, high_bulk_row in high_bulk_df.iterrows():
+            for _ in range(ratio):
+                if unstable_df.empty:
+                    break
+                unstable_row = unstable_df.sample(1).iloc[0]
+                preference_data.append(
+                    {
+                        "prompt": prompt,
+                        "chosen": high_bulk_row["processed_str"],
                         "rejected": unstable_row["processed_str"],
                     }
                 )
@@ -948,8 +1088,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--bulk_threshold",
         type=float,
-        default=300.0,
-        help="Threshold on bulk modulus for splitting high vs low stability in bulk-tiered SG datasets.",
+        default=325.0,
+        help="Threshold on bulk modulus for splitting high vs low bm in bulk-tiered SG datasets.",
     )
 
     parser.add_argument(
@@ -963,6 +1103,8 @@ if __name__ == "__main__":
             "tieredNovel",
             "sg",
             "sg_novel",
+            "bulk_novel",
+            "bulk_novel_v2",
         ],
         default="basic",
         help="Dataset creation mode: 'basic' (uses create_preference_dataset_2), 'tiered' (uses create_tiered_preference_dataset), 'tiered2' (uses create_tiered_preference_dataset_v2), or 'tieredSun' (uses create_tiered_preference_dataset_sun). Default is 'basic'.",
@@ -974,13 +1116,11 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--mode3",
+        "--mode_3",
         type=str,
-        choices=["bulk_novel"],
+        choices=["bulk_novel", "bulk_novel_v2"],
         default=None,
-        help="Optional bulk modulus extension built from input_path_3.",
     )
-
     parser.add_argument(
         "--sg_14",
         action="store_true",
@@ -1033,6 +1173,24 @@ if __name__ == "__main__":
             cif_column=args.cif_column,
             args=args,
         )
+    elif args.mode == "bulk_novel":
+        preference_data = create_preference_dataset_bulk_modulus_novel(
+            input_path=args.input_path,
+            threshold=args.threshold,
+            cif_column=args.cif_column,
+            bulk_column=args.bulk_column,
+            bulk_threshold=args.bulk_threshold,
+            args=args,
+        )
+    elif args.mode == "bulk_novel_v2":
+        preference_data = create_preference_dataset_bulk_modulus_novel_v2(
+            input_path=args.input_path,
+            threshold=args.threshold,
+            cif_column=args.cif_column,
+            bulk_column=args.bulk_column,
+            bulk_threshold=args.bulk_threshold,
+            args=args,
+        )
     else:
         preference_data = create_preference_dataset_2(
             input_path=args.input_path,
@@ -1061,14 +1219,29 @@ if __name__ == "__main__":
                     args=args,
                 )
             )
-    if args.mode3:
-        if args.mode3 == "bulk_novel":
+    if args.mode_3:
+        if args.mode_3 == "bulk_novel":
             if not args.input_path_3:
                 raise ValueError(
                     "mode3=bulk_novel requires --input_path_3 pointing to the bulk dataset"
                 )
             print(f"Creating bulk modulus preference dataset from {args.input_path_3}")
             bulk_pairs = create_preference_dataset_bulk_modulus_novel(
+                input_path=args.input_path_3,
+                threshold=args.threshold,
+                cif_column=args.cif_column,
+                bulk_column=args.bulk_column,
+                bulk_threshold=args.bulk_threshold,
+                args=args,
+            )
+            preference_data.extend(bulk_pairs)
+        elif args.mode_3 == "bulk_novel_v2":
+            if not args.input_path_3:
+                raise ValueError(
+                    "mode3=bulk_novel_v2 requires --input_path_3 pointing to the bulk dataset"
+                )
+            print(f"Creating bulk modulus preference dataset from {args.input_path_3}")
+            bulk_pairs = create_preference_dataset_bulk_modulus_novel_v2(
                 input_path=args.input_path_3,
                 threshold=args.threshold,
                 cif_column=args.cif_column,
