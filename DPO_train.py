@@ -14,7 +14,7 @@ from trl import (
     DPOConfig,
     DPOTrainer,
     ModelConfig,
-    ScriptArguments,
+    DPOScriptArguments,
     TrlParser,
     get_peft_config,
 )
@@ -168,17 +168,16 @@ def main(script_args, training_args, model_args, args):
     # ANDY NOTE, CODE WORKS UP TO HERE SO FAR
     # NEED TO MODIFY TRAINING ARG STUFF FOR OUR PREF DATASET NOW
     os.environ["WANDB_PROJECT"] = "PLaID Finetune"
-    os.environ["WANDB_LOG_MODEL"] = "end"  # log last model checkpoint
-    os.environ["WANDB_MODE"] = "offline"
+    os.environ["WANDB_LOG_MODEL"] = "false"
+    wandb_data_dir = str(Path.home() / ".cache" / "wandb")
     if args.online:
-        # os.environ["WANDB_CACHE_DIR"] = "/mnt/cs/cs152/individual/wandb"
-        # os.environ["WANDB_CONFIG_DIR"] = "/mnt/cs/cs152/individual/wandb"
-        # os.environ["WANDB_DIR"] = "/mnt/cs/cs152/individual/wandb"
-        os.environ["WANDB_DATA_DIR"] = "/mnt/cs/cs152/individual/wandb"
+        os.environ["WANDB_MODE"] = "online"
+        os.environ["WANDB_DATA_DIR"] = wandb_data_dir
     else:
+        os.environ["WANDB_MODE"] = "offline"
         os.environ["WANDB_CACHE_DIR"] = "/scratch/user/u.ax227774/wandb"
         os.environ["WANDB_CONFIG_DIR"] = "/scratch/user/u.ax227774/wandb"
-        os.environ["WANDB_DATA_DIR"] = "/scratch/user/u.ax227774/wandb"
+        os.environ["WANDB_DATA_DIR"] = wandb_data_dir
     training_args.model_adapter_name = "train_dpo"
     training_args.ref_adapter_name = "reference"
     trainer = DPOTrainer(
@@ -189,7 +188,7 @@ def main(script_args, training_args, model_args, args):
         eval_dataset=dataset[script_args.dataset_test_split]
         if training_args.eval_strategy != "no"
         else None,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         peft_config=peft_config,
     )
 
@@ -207,7 +206,7 @@ def main(script_args, training_args, model_args, args):
 
 
 def make_parser(subparsers: argparse._SubParsersAction = None):
-    dataclass_types = (ScriptArguments, DPOConfig, ModelConfig)
+    dataclass_types = (DPOScriptArguments, DPOConfig, ModelConfig)
     if subparsers is not None:
         parser = subparsers.add_parser(
             "dpo", help="Run the DPO training script", dataclass_types=dataclass_types

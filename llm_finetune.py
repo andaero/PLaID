@@ -99,16 +99,58 @@ class CifDataset(Dataset):
         self.format_options = format_options
         self.w_attributes = w_attributes
 
-    def crystal_string(self, input_dict):
+        # Pre-compute and cache crystal strings to avoid re-parsing CIFs every run
+        self._crystal_string_cache = self._load_or_build_crystal_cache(csv_fn)
+
+    def _cache_path(self, csv_fn):
+        """Deterministic cache path based on the csv glob pattern."""
+        import hashlib
+        key = hashlib.md5(csv_fn.encode()).hexdigest()
+        cache_dir = Path("cache")
+        cache_dir.mkdir(exist_ok=True)
+        return cache_dir / f"crystal_strings_{key}.pkl"
+
+    def _load_or_build_crystal_cache(self, csv_fn):
+        import pickle
+        cache_path = self._cache_path(csv_fn)
+        if cache_path.exists():
+            print(f"Loading cached crystal strings from {cache_path}")
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+            if len(cache) == len(self.inputs):
+                return cache
+            print("Cache size mismatch, rebuilding...")
+
+        print(f"Pre-computing crystal strings for {len(self.inputs)} samples...")
+        cache = {}
+        for i, inp in enumerate(self.inputs):
+            k = "cif" if "cif" in inp else "cif_str"
+            try:
+                cache[i] = get_crystal_string_wyckoff_pyx(inp[k])
+            except Exception as e:
+                print(f"Warning: failed to parse crystal {i}: {e}")
+                cache[i] = None
+            if (i + 1) % 1000 == 0:
+                print(f"  processed {i + 1}/{len(self.inputs)}")
+
+        with open(cache_path, "wb") as f:
+            pickle.dump(cache, f)
+        print(f"Cached crystal strings to {cache_path}")
+        return cache
+
+    def crystal_string(self, input_dict, index=None):
+        if index is not None and index in self._crystal_string_cache:
+            cached = self._crystal_string_cache[index]
+            if cached is not None:
+                return cached
         k = "cif" if "cif" in input_dict else "cif_str"
-        # change this to get_crystal_string if no wyckoff
         return get_crystal_string_wyckoff_pyx(input_dict[k])
 
-    def generation_task(self, input_dict):
+    def generation_task(self, input_dict, index=None):
         prompt = "Below is a description of a bulk material. "
 
         all_attributes = [
-            "formation_energy_per_atom",
+            # "formation_energy_per_atom",
             "band_gap",
             "e_above_hull",
             "spacegroup.number",
@@ -125,9 +167,9 @@ class CifDataset(Dataset):
         }
 
         valid_attributes = list(set(all_attributes) & set(input_dict.keys()))
-        
-        if not pd.isna(input_dict["bulk_mod"]):
-            prompt += f"{prompt_lookup["bulk_mod"]} {int(input_dict["bulk_mod"])}. "
+
+        if "bulk_mod" in input_dict and not pd.isna(input_dict["bulk_mod"]):
+            prompt += f"{prompt_lookup['bulk_mod']} {int(input_dict['bulk_mod'])}. "
         else:
             # sample a random collection of attributes
             num_attributes = random.randint(0, len(valid_attributes))
@@ -137,8 +179,14 @@ class CifDataset(Dataset):
 
                 for attr in attributes:
                     if attr == "elements":
-                        prompt += f"{prompt_lookup[attr]} {', '.join(input_dict[attr])}. "
-                    elif attr in ["formation_energy_per_atom", "band_gap", "e_above_hull"]:
+                        prompt += (
+                            f"{prompt_lookup[attr]} {', '.join(input_dict[attr])}. "
+                        )
+                    elif attr in [
+                        "formation_energy_per_atom",
+                        "band_gap",
+                        "e_above_hull",
+                    ]:
                         if not pd.isna(input_dict[attr]):
                             prompt += f"{prompt_lookup[attr]} {round(float(input_dict[attr]), 4)}. "
                     else:
@@ -155,7 +203,7 @@ class CifDataset(Dataset):
             "and then the element type and coordinates for each atom within the lattice:\n"
         )
 
-        crystal_str = self.crystal_string(input_dict)
+        crystal_str = self.crystal_string(input_dict, index)
         tokens = self.llama_tokenizer(
             prompt + crystal_str + self.llama_tokenizer.eos_token,
             return_tensors="pt",
@@ -165,7 +213,7 @@ class CifDataset(Dataset):
 
         return tokens
 
-    def infill_task(self, input_dict):
+    def infill_task(self, input_dict, index=None):
         prompt = (
             "Below is a partial description of a bulk material where one "
             'element has been replaced with the string "[MASK]":\n'
@@ -176,7 +224,7 @@ class CifDataset(Dataset):
         species = [str(s) for s in structure.species]
         species_to_remove = random.choice(species)
 
-        crystal_string = self.crystal_string(input_dict)
+        crystal_string = self.crystal_string(input_dict, index)
 
         partial_crystal_str = crystal_string.replace(species_to_remove, "[MASK]")
 
@@ -197,11 +245,11 @@ class CifDataset(Dataset):
 
         return tokens
 
-    def tokenize(self, input_dict):
+    def tokenize(self, input_dict, index=None):
         if random.random() < 0.66:
-            tokens = self.generation_task(input_dict)
+            tokens = self.generation_task(input_dict, index)
         else:
-            tokens = self.infill_task(input_dict)
+            tokens = self.infill_task(input_dict, index)
 
         input_ids = labels = tokens.input_ids[0]
         input_ids_lens = labels_lens = (
@@ -222,7 +270,7 @@ class CifDataset(Dataset):
             raise IndexError("Index out of range")
 
         vals = self.inputs[index]
-        vals = self.tokenize(vals)
+        vals = self.tokenize(vals, index)
         return vals
 
 
@@ -249,6 +297,7 @@ class DataCollatorForSupervisedDataset(object):
             labels=labels,
             attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
         )
+
 
 def setup_datasets(args, llama_tokenizer, transform_args={}):
     format_options = {
@@ -279,7 +328,7 @@ def setup_training_args(args):
     output_dir.mkdir(parents=True, exist_ok=True)
     os.environ["WANDB_PROJECT"] = "PLaID Finetune"
     os.environ["WANDB_LOG_MODEL"] = "end"  # log last model checkpoint
-    os.environ["WANDB_MODE"] = "offline"
+    os.environ["WANDB_MODE"] = "online"
 
     if args.debug:
         os.environ["WANDB_DISABLED"] = "True"
@@ -408,13 +457,13 @@ def setup_model(args, rank):
     else:
         model_string = llama3_model_string(model_size, is_chat)
 
-    quantization_config = BitsAndBytesConfig(load_in_4bit=args.fp4)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_string,
+    load_kwargs = dict(
         device_map="auto",
         torch_dtype=torch.bfloat16,
-        quantization_config=quantization_config,
     )
+    if args.fp4:
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
+    model = AutoModelForCausalLM.from_pretrained(model_string, **load_kwargs)
 
     llama_tokenizer = AutoTokenizer.from_pretrained(
         model_string,
@@ -480,14 +529,13 @@ def setup_model_offline(args, rank):
     else:
         model_string = f"meta-llama/{base_str}"
 
-
-    quantization_config = BitsAndBytesConfig(load_in_4bit=args.fp4)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_string,
+    load_kwargs = dict(
         device_map="auto",
         torch_dtype=torch.bfloat16,
-        quantization_config=quantization_config,
     )
+    if args.fp4:
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
+    model = AutoModelForCausalLM.from_pretrained(model_string, **load_kwargs)
 
     if args.qwen:
         tokenizer_string = f"Qwen/{base_str}"

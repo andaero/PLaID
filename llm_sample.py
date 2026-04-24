@@ -22,7 +22,6 @@ from peft import PeftModel
 from pymatgen.core import Structure
 from pymatgen.core.lattice import Lattice
 from llm_finetune import get_crystal_string, MAX_LENGTH
-from templating import make_swap_table
 
 from utils import parse_fn_wyckoff
 from cond_gen.sample_parse import parse_sg_col, seperate_dfs_by_condition
@@ -370,6 +369,7 @@ condition_templates = {
     "pretty_formula": "The chemical formula is {pretty_formula}. ",
     "e_above_hull": "The energy above the convex hull is {e_above_hull}. ",
     "spacegroup_number": "The spacegroup number is {spacegroup_number}. ",
+    "band_gap": "The band gap is {band_gap}. ",
 }
 
 
@@ -377,7 +377,7 @@ def conditional_sample(args):
     model, tokenizer = prepare_model_and_tokenizer(args)
 
     conditions_data = pd.read_csv(args.conditions_file)
-    required_columns = ["e_above_hull", "pretty_formula", "spacegroup_number"]
+    required_columns = ["e_above_hull", "pretty_formula", "spacegroup_number", "band_gap"]
     available_columns = [
         col for col in required_columns if col in conditions_data.columns
     ]
@@ -520,6 +520,7 @@ def infill_sample(args, start_crystal_cif=None):
 
     assert args.batch_size == 1, "Batch size must be 1 for infill sampling"
 
+    from templating import make_swap_table
     swap_table = make_swap_table(args.infill_constraint_tolerance)
 
     outputs = []
@@ -619,6 +620,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if args.conditions and "band_gap" in args.conditions:
+        prefix = "new_llm_samples/bandgap"
+    else:
+        prefix = "new_llm_samples"
+
+    args.out_path = os.path.join(prefix, args.out_path)
+
     if ".csv" in args.out_path:
         out_path = args.out_path
     else:
@@ -626,6 +634,7 @@ if __name__ == "__main__":
         out_path = os.path.join(args.out_path, f"samples_{i}.csv")
         args.out_path = out_path
 
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
     print("out_path: ", out_path)
     # Start timing
     start_time = time.time()
