@@ -228,7 +228,6 @@ def compute_novelty(crys, gt_crys, struc_cutoff, comp_cutoff, num_gen_crystals=N
 
     return metrics_dict
 
-
 class CDVAEGenEval(object):
     def __init__(
         self,

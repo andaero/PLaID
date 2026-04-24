@@ -57,7 +57,13 @@ python visualizations/histogram_ehull.py
 python visualizations/conditional_sg_bar_graph.py
 ```
 
-5. DFT Pipeline
+1. Sampling
+
+```
+uv run python llm_sample.py --model_name 7b --model_path exp/7b-wyckoff-run-qwen/checkpoint-19390 --num_samples 1000 --batch_size 1024 --out_path samples_bandgap_3.0.csv --conditions band_gap --conditions_file cond_gen/input_csv/band_gap_3.0.csv --qwen --wyckoff --online --use_fa2 --temperature 0.7
+```
+
+6. DFT Pipeline
 We run DFT on 1000 crystal structures sampled from the final PLaID++ flagship model. We've included scripts to help prepare the necessary configuration files to run DFT using vasp in directories corresponding to each crystal. 
 ```
 python dft/LLM_dft_create_inputs.py

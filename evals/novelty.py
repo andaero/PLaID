@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.core import Structure
-from toolz import compose
 
 from evals.novelty_utils.joblib_ import joblib_map
 from evals.novelty_utils.novelty_utils import save_metrics_only_overwrite_newly_computed
@@ -39,6 +38,10 @@ from evals.novelty_utils.tabular import VALID_TABULAR_DATASETS, get_tabular_data
 from cond_gen.sample_parse import get_real_space_group
 
 trap = io.StringIO()
+
+
+def sorted_chemsys(composition: str) -> tuple[str, ...]:
+    return tuple(sorted(get_chemsys(composition)))
 
 
 def get_matches(
@@ -201,8 +204,8 @@ def main(args: Namespace) -> tuple[pd.DataFrame, Path | None]:
             tds.process(stage)
         tabular: pd.DataFrame = getattr(tds, stage + "_df")
         # compositions must match to compare the resulting structure
-        gen_chemsys = df["composition"].map(compose(tuple, sorted, get_chemsys))
-        tab_chemsys = tabular["composition"].map(compose(tuple, sorted, get_chemsys))
+        gen_chemsys = df["composition"].map(sorted_chemsys)
+        tab_chemsys = tabular["composition"].map(sorted_chemsys)
         intersection = get_intersection(gen_chemsys, tab_chemsys)
         gen_to_compare = df["structure"][gen_chemsys.isin(intersection)]
         tab_to_compare = tab_chemsys.isin(intersection)
@@ -304,6 +307,21 @@ def main(args: Namespace) -> tuple[pd.DataFrame, Path | None]:
         )
         print(f"{len(sg_sun_materials)=}")
 
+    if args.bandgap_min is not None:
+        bg_col = "predicted_bandgap"
+        bg_min = args.bandgap_min
+        if bg_col not in og_df.columns:
+            print(f"Warning: bandgap column '{bg_col}' not found in dataframe")
+        else:
+            num_above = len(og_df[og_df[bg_col] >= bg_min])
+            print(f"Total structures with {bg_col} >= {bg_min}: {num_above}")
+            bg_sun_materials = og_df[
+                (og_df["sun"].fillna(False)) & (og_df[bg_col] >= bg_min)
+            ]
+            tracking_df["num_bg_sun"] = len(bg_sun_materials)
+            tracking_df["num_above_bg_threshold"] = num_above
+            print(f"{len(bg_sun_materials)=}")
+
     # change sun column name to the hull threshold
     og_df = og_df.rename(columns={"sun": f"sun_{args.e_above_hull_maximum}"})
 
@@ -359,16 +377,27 @@ if __name__ == "__main__":
 
     # COND GEN
     parser.add_argument("--sg", type=int, default=None)
+    parser.add_argument(
+        "--bandgap_min",
+        type=float,
+        default=None,
+        help="Minimum predicted band gap threshold for bandgap-based SUN stats",
+    )
 
     args = parser.parse_args()
     # check if file with _sun appended exists
 
     # Construct the new path with _sun appended before the extension
+    # If the input already ends with _sun, save in-place instead of appending another _sun
     original_dir = args.input.parent
     original_stem = args.input.stem
     original_suffix = args.input.suffix
-    new_csv_path = original_dir / f"{original_stem}_sun{original_suffix}"
-    if Path(new_csv_path).exists():
+    input_already_has_sun = original_stem.endswith("_sun")
+    if input_already_has_sun:
+        new_csv_path = args.input
+    else:
+        new_csv_path = original_dir / f"{original_stem}_sun{original_suffix}"
+    if not input_already_has_sun and Path(new_csv_path).exists():
         print(f"File {new_csv_path} already exists. Skipping.")
         exit()
 
@@ -376,11 +405,14 @@ if __name__ == "__main__":
 
     # If the input was a CSV, save the modified dataframe back to the original path
     if original_csv_path:
-        # Construct the new path with _sun appended before the extension
-        original_dir = original_csv_path.parent
-        original_stem = original_csv_path.stem
-        original_suffix = original_csv_path.suffix
-        new_csv_path = original_dir / f"{original_stem}_sun{original_suffix}"
+        if input_already_has_sun:
+            new_csv_path = original_csv_path
+        else:
+            # Construct the new path with _sun appended before the extension
+            original_dir = original_csv_path.parent
+            original_stem = original_csv_path.stem
+            original_suffix = original_csv_path.suffix
+            new_csv_path = original_dir / f"{original_stem}_sun{original_suffix}"
 
         print(
             f"Saving updated dataframe with is_unique, is_novel, and sun columns to: {new_csv_path}"
@@ -389,9 +421,10 @@ if __name__ == "__main__":
         new_csv_path.parent.mkdir(parents=True, exist_ok=True)
         modified_df.to_csv(new_csv_path, index=False)
         print("Save complete.")
-        # then delete the original_csv_path
-        original_csv_path.unlink()
-        print(f"Original csv {original_csv_path} deleted.")
+        # Only delete the original if we're writing to a different path
+        if new_csv_path != original_csv_path:
+            original_csv_path.unlink()
+            print(f"Original csv {original_csv_path} deleted.")
 
         if args.both_e_hulls:
             # Run for the other hull threshold

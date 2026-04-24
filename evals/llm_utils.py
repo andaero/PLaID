@@ -233,7 +233,6 @@ def compute_novelty(crys, gt_crys, struc_cutoff, comp_cutoff, num_gen_crystals=N
 
     return metrics_dict
 
-
 class CDVAEGenEval(object):
     def __init__(
         self,
@@ -372,7 +371,7 @@ def structure_validity(crystal, cutoff=0.5):
 
 
 class Crystal(object):
-    def __init__(self, crys_array_dict):
+    def __init__(self, crys_array_dict, compute_fingerprints=True):
         self.frac_coords = crys_array_dict["frac_coords"]
         self.atom_types = crys_array_dict["atom_types"]
         self.lengths = crys_array_dict["lengths"]
@@ -383,7 +382,7 @@ class Crystal(object):
         self.get_composition()
         self.get_validity()
 
-        if self.valid:
+        if self.valid and compute_fingerprints:
             self.get_fingerprints()
         else:
             self.comp_fp = None
@@ -448,7 +447,7 @@ class Crystal(object):
         self.struct_fp = np.array(site_fps).mean(axis=0)
 
 
-def cif_str_to_crystal(cif_str):
+def cif_str_to_crystal(cif_str, compute_fingerprints=True):
     try:
         structure = Structure.from_str(cif_str, fmt="cif")
         crystal = Crystal(
@@ -459,7 +458,8 @@ def cif_str_to_crystal(cif_str):
                 ],
                 "lengths": np.array(structure.lattice.parameters[:3]),
                 "angles": np.array(structure.lattice.parameters[3:]),
-            }
+            },
+            compute_fingerprints=compute_fingerprints,
         )
     except Exception as e:
         print(e)

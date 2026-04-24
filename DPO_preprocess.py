@@ -42,7 +42,7 @@ def create_preference_dataset(input_path, output_path, threshold, cif_column):
     # Split the dataset into train/test splits (if needed)
     # Example: 80% train, 20% test split
     dataset = dataset.train_test_split(
-        test_size=0.2, seed=42
+        test_size=0.1, seed=42
     )  # Adjust the split ratio as needed
 
     # Save the dataset to disk in the format expected by Hugging Face
@@ -481,6 +481,10 @@ def create_preference_dataset_bulk_modulus_novel_v2(
 ):
     """Create preference pairs from a bulk-modulus dataset.
 
+    This is the version we ended up using. Compared to v1, tier 3 restricts
+    chosen samples to stable high-bulk (rather than all stable), which
+    prevents mode collapse at higher iterations.
+
     Tiers:
       1. Stable high-bulk vs stable low-bulk structures.
       2. Stable novel (is_novel0.08 == True) high-bulk vs stable novel low-bulk.
@@ -605,6 +609,124 @@ def create_preference_dataset_bulk_modulus_novel_v2(
 
     if preference_data:
         print("Bulk modulus preference pairs created:", len(preference_data))
+    return preference_data
+
+
+def create_preference_dataset_band_novel_v2(
+    input_path, threshold, cif_column, bandgap_column, bandgap_threshold, args
+):
+    """Create preference pairs from a bandgap dataset using 6-tier ranking.
+
+    Tiers (best → worst, adjacent pairs only):
+      1. Stable (ehull<=threshold) + novel (is_novel0.0) + high bandgap (>=bandgap_threshold)
+      2. Stable + high bandgap (not novel)
+      3. Relaxed stable (ehull<=0.3) + high bandgap
+      4. Stable + moderate bandgap (>=1.0, <bandgap_threshold)
+      5. Relaxed stable (ehull<=0.3) + moderate bandgap
+      6. Unstable: (ehull>0 & bg<1) or ehull>0.3 or ehull.isna()
+
+    Excluded: ground-state (ehull<=0) + bg<1.0 crystals.
+    """
+
+    df = pd.read_csv(input_path)
+    if bandgap_column not in df.columns:
+        raise ValueError(f"Column '{bandgap_column}' not present in {input_path}.")
+
+    prompt = "Below is a description of a bulk material. "
+    prompt += condition_templates["band_gap"].format(band_gap=bandgap_threshold)
+    if args and args.conditions == "e_above_hull":
+        prompt += "The energy above the convex hull is 0. "
+    prompt += (
+        "Generate a description of the lengths and angles of the lattice vectors "
+        "and then the element type and coordinates for each atom within the lattice:\n"
+    )
+
+    tqdm.pandas()
+
+    def process_crystal_string(row):
+        if args and args.raw:
+            return "\n".join(row["gen_str"].split("\n")[1:])
+        return (
+            get_crystal_string_wyckoff_pyx(row[cif_column])
+            if args and args.wyckoff
+            else get_crystal_string(row[cif_column])
+        )
+
+    df["processed_str"] = df.progress_apply(process_crystal_string, axis=1)
+
+    # Classify into exclusive tiers (priority order)
+    stable = df["e_above_hull"] <= threshold
+    relaxed = df["e_above_hull"] <= 0.3
+    novel = df["is_novel0.0"] == True
+    bg_high = df[bandgap_column] >= bandgap_threshold
+    bg_mod = (df[bandgap_column] >= 1.0) & (df[bandgap_column] < bandgap_threshold)
+
+    t1_mask = stable & novel & bg_high
+    remaining = ~t1_mask
+    t2_mask = remaining & stable & bg_high
+    remaining = remaining & ~t2_mask
+    t3_mask = remaining & relaxed & bg_high
+    remaining = remaining & ~t3_mask
+    t4_mask = remaining & stable & bg_mod
+    remaining = remaining & ~t4_mask
+    t5_mask = remaining & relaxed & bg_mod
+    remaining = remaining & ~t5_mask
+    t6_mask = remaining & (
+        ((df["e_above_hull"] > 0) & (df[bandgap_column] < 1.0))
+        | (df["e_above_hull"] > 0.3)
+        | (df["e_above_hull"].isna())
+    )
+
+    tier_dfs = [
+        df[t1_mask].copy(),
+        df[t2_mask].copy(),
+        df[t3_mask].copy(),
+        df[t4_mask].copy(),
+        df[t5_mask].copy(),
+        df[t6_mask].copy(),
+    ]
+
+    tier_names = [
+        "Stable+Novel+HighBG",
+        "Stable+HighBG",
+        "Relaxed+HighBG",
+        "Stable+ModBG",
+        "Relaxed+ModBG",
+        "Unstable",
+    ]
+    for name, tdf in zip(tier_names, tier_dfs):
+        print(f"  Tier {name}: {len(tdf)}")
+
+    preference_data = []
+    ratio = args.ratio if args and hasattr(args, "ratio") else 2
+
+    # Create adjacent-tier pairs: (1→2), (2→3), (3→4), (4→5), (5→6)
+    for i in range(len(tier_dfs) - 1):
+        chosen_df = tier_dfs[i]
+        rejected_df = tier_dfs[i + 1]
+        if chosen_df.empty or rejected_df.empty:
+            print(
+                f"  Skipping pair ({tier_names[i]} vs {tier_names[i + 1]}): insufficient data."
+            )
+            continue
+        # Use ratio for the last pair (large unstable pool), 1 otherwise
+        pair_ratio = ratio if i == len(tier_dfs) - 2 else 1
+        for _, chosen_row in chosen_df.iterrows():
+            for _ in range(pair_ratio):
+                rejected_row = rejected_df.sample(1).iloc[0]
+                preference_data.append(
+                    {
+                        "prompt": prompt,
+                        "chosen": chosen_row["processed_str"],
+                        "rejected": rejected_row["processed_str"],
+                    }
+                )
+        print(
+            f"  Pair ({tier_names[i]} vs {tier_names[i + 1]}): {len(chosen_df) * pair_ratio} pairs"
+        )
+
+    if preference_data:
+        print(f"Bandgap preference pairs created: {len(preference_data)}")
     return preference_data
 
 
@@ -1091,6 +1213,18 @@ if __name__ == "__main__":
         default=325.0,
         help="Threshold on bulk modulus for splitting high vs low bm in bulk-tiered SG datasets.",
     )
+    parser.add_argument(
+        "--bandgap_column",
+        type=str,
+        default="predicted_bandgap",
+        help="Column containing bandgap values.",
+    )
+    parser.add_argument(
+        "--bandgap_threshold",
+        type=float,
+        default=3.0,
+        help="Threshold for high vs low bandgap.",
+    )
 
     parser.add_argument(
         "--mode",
@@ -1112,7 +1246,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode_2",
         type=str,
-        choices=["sg", "sg_novel"],
+        choices=["sg", "sg_novel", "band_novel_v2"],
         default=None,
     )
     parser.add_argument(
@@ -1216,6 +1350,18 @@ if __name__ == "__main__":
                     input_path=args.input_path_2,
                     threshold=args.threshold,
                     cif_column=args.cif_column,
+                    args=args,
+                )
+            )
+        elif args.mode_2 == "band_novel_v2":
+            print(f"Creating bandgap preference dataset from {args.input_path_2}")
+            preference_data.extend(
+                create_preference_dataset_band_novel_v2(
+                    input_path=args.input_path_2,
+                    threshold=args.threshold,
+                    cif_column=args.cif_column,
+                    bandgap_column=args.bandgap_column,
+                    bandgap_threshold=args.bandgap_threshold,
                     args=args,
                 )
             )
